@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Neon Arena — 3D Arena Shooter</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><circle cx='16' cy='16' r='11' fill='none' stroke='%232de2ff' stroke-width='3'/><circle cx='16' cy='16' r='3' fill='%23ff2a6d'/></svg>" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700;900&family=Inter:wght@400;600&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="style.css" />
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
+        "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"
+      }
+    }
+  </script>
+</head>
+<body>
+  <div id="game"></div>
+
+  <div id="hud" class="hidden">
+    <div class="hud-top">
+      <div class="bar-card player">
+        <div class="bar-label"><span>YOU</span><span id="player-hp-text">100</span></div>
+        <div class="bar"><div id="player-hp" class="bar-fill"></div></div>
+      </div>
+      <div class="score-card">
+        <div id="round-label" class="round-label">ROUND 1</div>
+        <div class="score"><span id="score-player">0</span><span class="sep">:</span><span id="score-bot">0</span></div>
+        <div class="first-to">FIRST TO 3</div>
+      </div>
+      <div class="bar-card bot">
+        <div class="bar-label"><span id="bot-hp-text">100</span><span>BOT</span></div>
+        <div class="bar"><div id="bot-hp" class="bar-fill"></div></div>
+      </div>
+    </div>
+
+    <div id="crosshair"><span></span><span></span><span></span><span></span></div>
+    <div id="hitmarker"></div>
+    <div id="dmg-indicator"></div>
+    <div id="announce"></div>
+    <canvas id="minimap" width="170" height="170"></canvas>
+    <div class="hud-hint">← → turn · ↑ ↓ move · SPACE shoot · P pause</div>
+  </div>
+
+  <div id="vignette"></div>
+
+  <div id="start-screen" class="overlay">
+    <div class="panel">
+      <div class="eyebrow">1 v 1 ARENA</div>
+      <h1>NEON<span>ARENA</span></h1>
+      <p class="tagline">Outmaneuver a hunting combat bot. First to win 3 rounds takes the match.</p>
+      <div class="controls">
+        <div class="control"><div class="keys"><kbd>↑</kbd><kbd>↓</kbd></div><span>Move forward / back</span></div>
+        <div class="control"><div class="keys"><kbd>←</kbd><kbd>→</kbd></div><span>Turn left / right</span></div>
+        <div class="control"><div class="keys"><kbd class="wide">SPACE</kbd></div><span>Shoot (hold for auto)</span></div>
+        <div class="control"><div class="keys"><kbd>A</kbd><kbd>D</kbd></div><span>Strafe (optional)</span></div>
+      </div>
+      <div class="difficulty">
+        <span class="diff-label">DIFFICULTY</span>
+        <button data-diff="easy">EASY</button>
+        <button data-diff="normal" class="active">NORMAL</button>
+        <button data-diff="hard">HARD</button>
+      </div>
+      <button id="start-btn" class="cta">START MATCH</button>
+      <div class="press-hint">or press <kbd>ENTER</kbd></div>
+    </div>
+  </div>
+
+  <div id="pause-screen" class="overlay hidden">
+    <div class="panel small">
+      <h2>PAUSED</h2>
+      <button id="resume-btn" class="cta">RESUME</button>
+      <div class="press-hint">press <kbd>P</kbd> or <kbd>ESC</kbd> to resume</div>
+    </div>
+  </div>
+
+  <div id="end-screen" class="overlay hidden">
+    <div class="panel">
+      <div id="end-eyebrow" class="eyebrow">MATCH OVER</div>
+      <h1 id="end-title">VICTORY</h1>
+      <div id="end-score" class="end-score">3 : 1</div>
+      <div class="stats">
+        <div><span id="stat-acc">0%</span><label>Accuracy</label></div>
+        <div><span id="stat-dealt">0</span><label>Damage dealt</label></div>
+        <div><span id="stat-taken">0</span><label>Damage taken</label></div>
+        <div><span id="stat-time">0:00</span><label>Match time</label></div>
+      </div>
+      <button id="restart-btn" class="cta">PLAY AGAIN</button>
+      <div class="press-hint">press <kbd>ENTER</kbd> to restart · <kbd>M</kbd> for menu</div>
+    </div>
+  </div>
+
+  <script type="module" src="main.js"></script>
+</body>
+</html>
