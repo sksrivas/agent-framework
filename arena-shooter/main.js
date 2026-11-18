@@ -12,8 +12,8 @@ const ARENA = 25; // half-extent of the square arena
 const WALL_H = 4.5;
 const EYE = 1.6;
 const PLAYER_R = 0.45;
-const BOT_R = 0.55;
-const CHAR_H = 2.2;
+const BOT_R = 0.6;
+const CHAR_H = 2.3;
 const MAX_HP = 100;
 const ROUNDS_TO_WIN = 3;
 
@@ -637,73 +637,171 @@ camera.add(gunFill);
 // ---------------------------------------------------------------------------
 // Bot
 // ---------------------------------------------------------------------------
+const RED = new THREE.Color(0xff1f3d);
 const botMats = {
-  body: new THREE.MeshStandardMaterial({ color: 0x6b74b0, metalness: 0.55, roughness: 0.35, emissive: 0xffffff, emissiveIntensity: 0 }),
-  dark: new THREE.MeshStandardMaterial({ color: 0x2b2f52, metalness: 0.5, roughness: 0.45, emissive: 0xffffff, emissiveIntensity: 0 }),
-  accent: stripMat(COLORS.magenta, 3),
+  armor: new THREE.MeshStandardMaterial({ color: 0x79819e, metalness: 0.5, roughness: 0.35, emissive: 0xffffff, emissiveIntensity: 0 }),
+  plate: new THREE.MeshStandardMaterial({ color: 0x3a3f50, metalness: 0.45, roughness: 0.42, emissive: 0xffffff, emissiveIntensity: 0 }),
+  joint: new THREE.MeshStandardMaterial({ color: 0x16171f, metalness: 0.4, roughness: 0.6, emissive: 0xffffff, emissiveIntensity: 0 }),
+  gun: new THREE.MeshStandardMaterial({ color: 0x2c2e3a, metalness: 0.5, roughness: 0.35 }),
+  visor: new THREE.MeshStandardMaterial({ color: 0x040406, metalness: 0.9, roughness: 0.12 }),
+  accent: stripMat(RED, 2.5),
+  eyes: stripMat(RED, 6),
 };
+const BOT_FLASH_MATS = [botMats.armor, botMats.plate, botMats.joint];
+const UP = new THREE.Vector3(0, 1, 0);
+const UPPER_Y = 1.1;
 
 function buildBot() {
   const root = new THREE.Group();
+  root.rotation.order = 'YXZ';
   const rig = new THREE.Group();
   root.add(rig);
-  const add = (parent, geo, mat, x, y, z) => {
+  const add = (parent, geo, mat, x, y, z, rx = 0, ry = 0, rz = 0) => {
     const m = new THREE.Mesh(geo, mat);
     m.position.set(x, y, z);
+    m.rotation.set(rx, ry, rz);
     m.castShadow = true;
     parent.add(m);
     return m;
   };
+  const rbox = (w, h, d, r = 0.04) => new RoundedBoxGeometry(w, h, d, 2, r);
+  // Armored capsule spanning two joints, with a plate sleeve over it.
+  const limb = (parent, from, to, radius, sleeve) => {
+    const dir = new THREE.Vector3().subVectors(to, from);
+    const len = dir.length();
+    dir.normalize();
+    const mid = from.clone().addScaledVector(dir, len / 2);
+    const q = new THREE.Quaternion().setFromUnitVectors(UP, dir);
+    const c = add(parent, new THREE.CapsuleGeometry(radius, len, 4, 10), botMats.joint, mid.x, mid.y, mid.z);
+    c.quaternion.copy(q);
+    if (sleeve) {
+      const s = add(parent, rbox(radius * 2.7, len * 0.72, radius * 2.7, 0.03), botMats.armor, mid.x, mid.y, mid.z);
+      s.quaternion.copy(q);
+    }
+    add(parent, new THREE.SphereGeometry(radius * 1.35, 12, 10), botMats.joint, to.x, to.y, to.z);
+  };
+
+  // Legs: hip pivot -> thigh -> knee pivot -> shin -> foot.
   const legs = [];
   for (const sx of [-1, 1]) {
     const hip = new THREE.Group();
-    hip.position.set(sx * 0.18, 0.9, 0);
+    hip.position.set(sx * 0.19, 1.0, 0);
     rig.add(hip);
-    add(hip, new RoundedBoxGeometry(0.22, 0.88, 0.26, 2, 0.05), botMats.dark, 0, -0.45, 0);
-    add(hip, new THREE.BoxGeometry(0.24, 0.04, 0.02), botMats.accent, 0, -0.3, 0.135);
-    legs.push(hip);
+    add(hip, new THREE.SphereGeometry(0.12, 12, 10), botMats.joint, 0, 0, 0);
+    add(hip, rbox(0.25, 0.46, 0.3, 0.06), botMats.armor, 0, -0.25, 0.01);
+    add(hip, rbox(0.27, 0.16, 0.32, 0.04), botMats.plate, sx * 0.02, -0.06, 0.01);
+    add(hip, new THREE.BoxGeometry(0.03, 0.26, 0.02), botMats.accent, 0, -0.27, 0.165);
+    const knee = new THREE.Group();
+    knee.position.y = -0.5;
+    hip.add(knee);
+    add(knee, new THREE.SphereGeometry(0.1, 12, 10), botMats.joint, 0, 0, 0);
+    add(knee, rbox(0.2, 0.17, 0.12), botMats.plate, 0, 0.02, 0.12, -0.25);
+    add(knee, rbox(0.21, 0.42, 0.25, 0.05), botMats.plate, 0, -0.24, 0);
+    add(knee, rbox(0.17, 0.3, 0.07, 0.02), botMats.armor, 0, -0.21, 0.13, 0.08);
+    add(knee, new THREE.BoxGeometry(0.1, 0.03, 0.02), botMats.accent, 0, -0.12, 0.17);
+    add(knee, rbox(0.26, 0.1, 0.44, 0.03), botMats.joint, 0, -0.47, 0.06);
+    add(knee, rbox(0.24, 0.07, 0.13, 0.02), botMats.armor, 0, -0.43, 0.24);
+    legs.push({ hip, knee });
   }
+  add(rig, rbox(0.56, 0.22, 0.34, 0.06), botMats.plate, 0, 1.04, 0);
+  add(rig, rbox(0.22, 0.22, 0.06, 0.02), botMats.armor, 0, 0.96, 0.17, -0.15);
+
   const upper = new THREE.Group();
-  upper.position.y = 0.9;
+  upper.position.y = UPPER_Y;
   rig.add(upper);
-  add(upper, new RoundedBoxGeometry(0.5, 0.2, 0.32, 2, 0.05), botMats.dark, 0, 0.05, 0);
-  add(upper, new RoundedBoxGeometry(0.78, 0.7, 0.46, 3, 0.1), botMats.body, 0, 0.5, 0);
-  add(upper, new THREE.SphereGeometry(0.09, 16, 12), botMats.accent, 0, 0.55, 0.23);
-  add(upper, new THREE.BoxGeometry(0.6, 0.03, 0.02), botMats.accent, 0, 0.3, 0.235);
+  // Abdomen with layered segments.
+  add(upper, rbox(0.44, 0.32, 0.3), botMats.joint, 0, 0.12, 0);
+  for (let i = 0; i < 3; i++) add(upper, rbox(0.4 - i * 0.02, 0.06, 0.06, 0.02), botMats.plate, 0, 0.04 + i * 0.085, 0.15);
+  // Chest.
+  add(upper, new RoundedBoxGeometry(0.84, 0.5, 0.5, 3, 0.1), botMats.armor, 0, 0.5, 0);
+  for (const sx of [-1, 1]) add(upper, rbox(0.37, 0.3, 0.08, 0.03), botMats.plate, sx * 0.2, 0.56, 0.25, 0, -sx * 0.28);
+  const core = add(upper, new THREE.OctahedronGeometry(0.075), botMats.eyes, 0, 0.42, 0.3);
+  add(upper, new THREE.TorusGeometry(0.095, 0.015, 6, 20), botMats.plate, 0, 0.42, 0.29);
+  add(upper, new THREE.BoxGeometry(0.7, 0.025, 0.02), botMats.accent, 0, 0.27, 0.255);
+  add(upper, rbox(0.5, 0.12, 0.4), botMats.plate, 0, 0.77, 0);
+  add(upper, new THREE.CylinderGeometry(0.08, 0.1, 0.16, 10), botMats.joint, 0, 0.86, 0);
+  // Backpack reactor with glowing vents and exhausts.
+  add(upper, rbox(0.6, 0.5, 0.25, 0.05), botMats.plate, 0, 0.52, -0.33);
+  for (let i = 0; i < 3; i++) add(upper, new THREE.BoxGeometry(0.4, 0.022, 0.01), botMats.accent, 0, 0.42 + i * 0.08, -0.46);
+  for (const sx of [-1, 1]) {
+    add(upper, new THREE.CylinderGeometry(0.055, 0.075, 0.38, 10), botMats.joint, sx * 0.2, 0.86, -0.38, -0.25);
+    add(upper, new THREE.CircleGeometry(0.045, 10), botMats.accent, sx * 0.2, 1.04, -0.43, -Math.PI / 2 - 0.25);
+  }
+  // Spiked shoulder pauldrons.
+  for (const sx of [-1, 1]) {
+    add(upper, new THREE.SphereGeometry(0.13, 12, 10), botMats.joint, sx * 0.47, 0.66, 0);
+    const pad = new THREE.Group();
+    pad.position.set(sx * 0.5, 0.8, 0);
+    pad.rotation.z = -sx * 0.38;
+    upper.add(pad);
+    add(pad, new RoundedBoxGeometry(0.34, 0.14, 0.46, 3, 0.05), botMats.armor, 0, 0, 0);
+    add(pad, rbox(0.3, 0.1, 0.42, 0.03), botMats.plate, sx * 0.05, -0.1, 0);
+    add(pad, new THREE.BoxGeometry(0.3, 0.022, 0.02), botMats.accent, 0, -0.02, 0.235);
+    for (const z of [-0.12, 0.08]) add(pad, new THREE.ConeGeometry(0.04, 0.22, 6), botMats.plate, sx * 0.03, 0.16, z, 0, 0, -sx * 0.25);
+  }
+
+  // Head: helmet, dark faceplate, angry slanted eye slits, swept horns.
   const head = new THREE.Group();
-  head.position.y = 0.98;
+  head.position.y = 1.02;
   upper.add(head);
-  add(head, new RoundedBoxGeometry(0.44, 0.34, 0.4, 3, 0.08), botMats.body, 0, 0, 0);
-  add(head, new RoundedBoxGeometry(0.36, 0.09, 0.03, 2, 0.01), botMats.accent, 0, 0.02, 0.2);
-  add(head, new THREE.CylinderGeometry(0.012, 0.012, 0.3), botMats.dark, 0.14, 0.3, -0.05);
-  add(head, new THREE.SphereGeometry(0.03, 8, 8), botMats.accent, 0.14, 0.46, -0.05);
-  // Gun arm (right) and support arm (left).
-  const arm = new THREE.Group();
-  arm.position.set(0.5, 0.62, 0);
-  upper.add(arm);
-  add(arm, new RoundedBoxGeometry(0.18, 0.18, 0.5, 2, 0.04), botMats.dark, 0, -0.1, 0.18);
-  add(arm, new RoundedBoxGeometry(0.14, 0.14, 0.5, 2, 0.03), botMats.body, 0, -0.08, 0.5);
-  add(arm, new THREE.BoxGeometry(0.15, 0.025, 0.4), botMats.accent, 0, -0.005, 0.5);
+  add(head, new RoundedBoxGeometry(0.34, 0.28, 0.36, 3, 0.07), botMats.armor, 0, 0, 0);
+  add(head, rbox(0.29, 0.15, 0.05, 0.02), botMats.visor, 0, 0, 0.17);
+  for (const sx of [-1, 1]) add(head, new THREE.BoxGeometry(0.095, 0.026, 0.02), botMats.eyes, sx * 0.068, 0.012, 0.2, 0, 0, sx * 0.3);
+  add(head, rbox(0.33, 0.05, 0.09, 0.02), botMats.plate, 0, 0.075, 0.16, 0.35);
+  add(head, rbox(0.2, 0.09, 0.07, 0.02), botMats.plate, 0, -0.105, 0.15);
+  for (let i = -1; i <= 1; i++) add(head, new THREE.BoxGeometry(0.015, 0.05, 0.01), botMats.joint, i * 0.05, -0.105, 0.19);
+  for (const sx of [-1, 1]) add(head, new THREE.ConeGeometry(0.035, 0.28, 6), botMats.plate, sx * 0.17, 0.1, -0.06, -1.05, 0, -sx * 0.45);
+  add(head, rbox(0.03, 0.07, 0.3, 0.01), botMats.plate, 0, 0.165, -0.03);
+
+  // Rifle held in both hands at chest height. `aim` carries arms + gun so recoil moves them together.
+  const aim = new THREE.Group();
+  upper.add(aim);
+  const gunG = new THREE.Group();
+  gunG.position.set(0.1, 0.42, 0.18);
+  aim.add(gunG);
+  add(gunG, rbox(0.11, 0.16, 0.55, 0.03), botMats.gun, 0, 0, 0.1);
+  add(gunG, rbox(0.1, 0.11, 0.3, 0.02), botMats.plate, 0, 0.01, 0.5);
+  add(gunG, new THREE.CylinderGeometry(0.026, 0.026, 0.28, 10), botMats.gun, 0, 0.01, 0.76, Math.PI / 2);
+  add(gunG, new THREE.CylinderGeometry(0.042, 0.042, 0.09, 10), botMats.joint, 0, 0.01, 0.9, Math.PI / 2);
+  add(gunG, rbox(0.08, 0.13, 0.26, 0.02), botMats.gun, 0, -0.02, -0.27);
+  add(gunG, rbox(0.07, 0.22, 0.1, 0.015), botMats.gun, 0, -0.16, 0.16, 0.25);
+  add(gunG, new THREE.CylinderGeometry(0.03, 0.03, 0.2, 10), botMats.joint, 0, 0.13, 0.05, Math.PI / 2);
+  add(gunG, new THREE.CircleGeometry(0.024, 10), botMats.eyes, 0, 0.13, 0.151);
+  for (const sx of [-1, 1]) add(gunG, new THREE.BoxGeometry(0.01, 0.02, 0.42), botMats.accent, sx * 0.058, 0.02, 0.18);
+  add(gunG, new THREE.BoxGeometry(0.04, 0.06, 0.12), botMats.eyes, -0.07, -0.02, 0.0);
   const muzzle = new THREE.Object3D();
-  muzzle.position.set(0, -0.08, 0.78);
-  arm.add(muzzle);
-  const lArm = add(upper, new RoundedBoxGeometry(0.16, 0.6, 0.18, 2, 0.04), botMats.dark, -0.5, 0.38, 0.06);
-  lArm.rotation.x = -0.5;
-  return { root, rig, legs, upper, head, muzzle };
+  muzzle.position.set(0, 0.01, 0.96);
+  gunG.add(muzzle);
+  const V = (x, y, z) => new THREE.Vector3(x, y, z);
+  // Right arm -> rear grip, left arm -> foregrip.
+  limb(aim, V(0.47, 0.66, 0), V(0.42, 0.32, -0.04), 0.075, true);
+  limb(aim, V(0.42, 0.32, -0.04), V(0.12, 0.33, 0.17), 0.07, true);
+  limb(aim, V(-0.47, 0.66, 0), V(-0.4, 0.3, 0.26), 0.075, true);
+  limb(aim, V(-0.4, 0.3, 0.26), V(0.08, 0.35, 0.5), 0.07, true);
+  add(aim, rbox(0.1, 0.11, 0.13, 0.03), botMats.joint, 0.12, 0.31, 0.18);
+  add(aim, rbox(0.11, 0.1, 0.13, 0.03), botMats.joint, 0.09, 0.34, 0.52);
+
+  return { root, rig, legs, upper, head, aim, core, muzzle };
 }
 
 const botModel = buildBot();
 scene.add(botModel.root);
-const botFlash = makeFlash(COLORS.orange, 0.55);
+const botFlash = makeFlash(COLORS.orange, 1.1);
 botModel.muzzle.add(botFlash);
+const botFlashCone = new THREE.Mesh(
+  new THREE.ConeGeometry(0.1, 0.5, 8, 1, true).rotateX(Math.PI / 2).translate(0, 0, 0.2),
+  new THREE.MeshBasicMaterial({ color: COLORS.orange.clone().multiplyScalar(4), toneMapped: false, transparent: true, opacity: 0.9, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide }),
+);
+botFlashCone.visible = false;
+botModel.muzzle.add(botFlashCone);
 const botLight = new THREE.PointLight(0xff8a3d, 0, 9, 2);
 botModel.muzzle.add(botLight);
-const botGlow = new THREE.PointLight(0xff2a6d, 4, 5, 1.5);
-botGlow.position.set(0, 1.5, 0.9);
+const botGlow = new THREE.PointLight(0xff1f3d, 4, 5, 1.5);
+botGlow.position.set(0, 2.1, 0.9);
 botModel.root.add(botGlow);
 const botRing = new THREE.Mesh(
-  new THREE.RingGeometry(0.62, 0.72, 40).rotateX(-Math.PI / 2),
-  new THREE.MeshBasicMaterial({ color: COLORS.magenta.clone().multiplyScalar(2), toneMapped: false, transparent: true, opacity: 0.85, depthWrite: false }),
+  new THREE.RingGeometry(0.66, 0.76, 40).rotateX(-Math.PI / 2),
+  new THREE.MeshBasicMaterial({ color: RED.clone().multiplyScalar(2), toneMapped: false, transparent: true, opacity: 0.85, depthWrite: false }),
 );
 botRing.position.y = 0.02;
 botModel.root.add(botRing);
@@ -742,6 +840,11 @@ const bot = {
   retreatCd: 0,
   flash: 0,
   walk: 0,
+  recoil: 0,
+  hitReact: 0,
+  hitSide: 1,
+  sparkT: 0,
+  landed: false,
   dead: false,
   deathT: 0,
 };
@@ -831,6 +934,8 @@ function placeCharacters() {
   bot.lastKnown.copy(s.player);
   bot.retreatCd = 0;
   bot.alertT = 0;
+  bot.recoil = bot.hitReact = 0;
+  bot.landed = false;
   botModel.root.rotation.set(0, bot.yaw, 0);
   botModel.root.position.set(bot.pos.x, 0, bot.pos.y);
   botModel.root.visible = true;
@@ -1018,15 +1123,20 @@ function damagePlayer(amount, from) {
   updateHud();
 }
 
-function damageBot(amount, at) {
+function damageBot(amount, at, dir) {
   if (bot.dead) return;
   bot.hp -= amount;
   bot.flash = 1;
+  bot.hitReact = 1;
+  // Which side was hit, relative to the bot's facing, decides the twist direction.
+  bot.hitSide = Math.sign((at.x - bot.pos.x) * Math.cos(bot.yaw) - (at.z - bot.pos.y) * Math.sin(bot.yaw)) || 1;
+  if (dir) { bot.vel.x += dir.x * 2.2; bot.vel.y += dir.z * 2.2; }
+  bot.fireCd = Math.max(bot.fireCd, 0.18);
   bot.alertT = 3;
   bot.lastKnown.copy(player.pos);
   game.stats.hits++;
   game.stats.dealt += amount;
-  particles.emit(at, COLORS.magenta, 14, 6, 0.45);
+  particles.emit(at, RED, 14, 6, 0.45);
   if (bot.hp <= 0) {
     bot.hp = 0;
     bot.dead = true;
@@ -1034,7 +1144,7 @@ function damageBot(amount, at) {
     flashHitmarker(true);
     audio.kill();
     const c = new THREE.Vector3(bot.pos.x, 1.3, bot.pos.y);
-    particles.emit(c, COLORS.magenta, 90, 10, 1.0);
+    particles.emit(c, RED, 90, 10, 1.0);
     particles.emit(c, COLORS.orange, 60, 7, 0.9);
     endRound('player');
   } else {
@@ -1183,7 +1293,8 @@ function updateBot(dt) {
 function botShoot(dist) {
   const D = diff();
   bot.fireCd = D.fireInterval * (0.85 + Math.random() * 0.3);
-  syncBotModel(0);
+  botModel.root.position.set(bot.pos.x, 0, bot.pos.y);
+  botModel.root.rotation.y = bot.yaw;
   botModel.root.updateMatrixWorld(true);
   const origin = botModel.muzzle.getWorldPosition(new THREE.Vector3());
   if (segmentBlocked(bot.pos.x, bot.pos.y, origin.x, origin.z)) return;
@@ -1198,22 +1309,93 @@ function botShoot(dist) {
   spawnBullet('bot', origin, dir, BOT_BULLET_SPEED, D.damage);
   botFlash.visible = true;
   botFlash.material.rotation = Math.random() * Math.PI;
+  botFlashCone.visible = true;
+  botFlashCone.scale.set(1, 1, 0.8 + Math.random() * 0.5);
+  botFlashCone.rotation.z = Math.random() * Math.PI;
   botLight.intensity = 8;
+  bot.recoil = 1;
   const [pan, vol] = panVol(origin);
   audio.botShoot(pan, vol);
 }
 
-function syncBotModel(dt) {
-  const r = botModel.root;
-  r.position.set(bot.pos.x, 0, bot.pos.y);
-  if (!bot.dead) r.rotation.y = bot.yaw;
+const easeOut = (x) => 1 - (1 - Math.min(1, Math.max(0, x))) ** 3;
+
+function animateBot(dt, time) {
+  const m = botModel;
+  m.root.position.set(bot.pos.x, 0, bot.pos.y);
+  bot.recoil = Math.max(0, bot.recoil - dt * 8);
+  bot.hitReact = Math.max(0, bot.hitReact - dt * 4);
+  bot.flash = Math.max(0, bot.flash - dt * 6);
+  for (const mat of BOT_FLASH_MATS) mat.emissiveIntensity = bot.flash * 0.8;
+  if (bot.dead) { animateBotDeath(dt); return; }
+
+  m.root.rotation.set(0, bot.yaw, 0);
   const sp = bot.vel.length();
-  bot.walk += dt * sp * 2.2;
-  const swing = Math.sin(bot.walk) * Math.min(1, sp / 3) * 0.6;
-  botModel.legs[0].rotation.x = swing;
-  botModel.legs[1].rotation.x = -swing;
-  botModel.rig.position.y = Math.abs(Math.cos(bot.walk)) * 0.05 * Math.min(1, sp / 3);
-  botModel.upper.rotation.z = Math.sin(bot.walk) * 0.03;
+  const moving = Math.min(1, sp / 3);
+  const fwdSpeed = bot.vel.x * Math.sin(bot.yaw) + bot.vel.y * Math.cos(bot.yaw);
+  bot.walk += dt * sp * 2.4 * (fwdSpeed < -0.5 ? -1 : 1);
+  m.legs.forEach((l, i) => {
+    const w = bot.walk + (i ? Math.PI : 0);
+    l.hip.rotation.x = -Math.sin(w) * 0.55 * moving;
+    // Knee bends while the leg swings forward.
+    l.knee.rotation.x = Math.max(0, Math.cos(w)) * 0.95 * moving + 0.06;
+  });
+  m.rig.position.y = -Math.abs(Math.sin(bot.walk)) * 0.05 * moving;
+  m.upper.position.y = UPPER_Y + Math.sin(time * 2.2) * 0.012;
+  m.upper.rotation.set(
+    0.08 * moving - bot.hitReact * 0.35 - bot.recoil * 0.06,
+    Math.sin(bot.walk) * 0.07 * moving + bot.hitSide * bot.hitReact * 0.25,
+    bot.hitSide * bot.hitReact * 0.12,
+  );
+  m.head.rotation.set(-bot.hitReact * 0.3, bot.canSee ? 0 : Math.sin(time * 0.9) * 0.35, 0);
+  m.aim.position.set(0, 0, -bot.recoil * 0.08);
+  m.aim.rotation.set(-bot.recoil * 0.12, 0, 0);
+  m.core.rotation.y += dt * 3;
+  const glitch = bot.hitReact > 0.5 && Math.random() < 0.5 ? 0.3 : 1;
+  botMats.eyes.color.copy(RED).multiplyScalar((5 + Math.sin(time * 6) * 1.2 + bot.flash * 4) * glitch);
+  botMats.accent.color.copy(RED).multiplyScalar(2.2 + Math.sin(time * 6) * 0.5);
+  botGlow.intensity = 4;
+  botRing.visible = true;
+}
+
+function animateBotDeath(dt) {
+  const m = botModel;
+  bot.deathT += dt;
+  bot.vel.set(0, 0);
+  const t = bot.deathT;
+  // Jolt back, knees buckle, then topple forward onto the floor.
+  const jolt = easeOut(t / 0.12) * (1 - easeOut((t - 0.12) / 0.3));
+  const buckle = easeOut((t - 0.12) / 0.45);
+  const f = Math.min(1, Math.max(0, (t - 0.5) / 0.55));
+  const fall = f * f;
+  m.legs.forEach((l, i) => {
+    l.hip.rotation.x = -1.15 * buckle * (i ? 1 : 0.85);
+    l.knee.rotation.x = 1.9 * buckle;
+  });
+  m.rig.position.y = -0.42 * buckle;
+  m.upper.rotation.set(-0.55 * jolt + 0.45 * buckle, 0.2 * bot.hitSide * buckle, 0.2 * bot.hitSide * buckle);
+  m.head.rotation.set(0.5 * buckle, 0, 0.35 * buckle);
+  m.aim.position.set(0, -0.15 * buckle, 0);
+  m.aim.rotation.set(0.7 * buckle, 0, 0);
+  m.root.rotation.set(1.3 * fall, bot.yaw, 0);
+  if (f >= 1 && !bot.landed) {
+    bot.landed = true;
+    game.shake = Math.min(1, game.shake + 0.25);
+    particles.emit(new THREE.Vector3(bot.pos.x + Math.sin(bot.yaw) * 1.2, 0.2, bot.pos.y + Math.cos(bot.yaw) * 1.2), RED, 30, 5, 0.6);
+  }
+  // Short-circuit sparks while the eyes flicker out.
+  bot.sparkT -= dt;
+  if (t < 2.2 && bot.sparkT <= 0) {
+    bot.sparkT = 0.08 + Math.random() * 0.12;
+    m.core.updateMatrixWorld(true);
+    particles.emit(m.core.getWorldPosition(new THREE.Vector3()), Math.random() < 0.5 ? RED : COLORS.orange, 6, 4, 0.4);
+  }
+  const fade = Math.max(0, 1 - t / 1.6);
+  const flicker = Math.random() < 0.35 ? 0.15 : 1;
+  botMats.eyes.color.copy(RED).multiplyScalar(6 * fade * flicker);
+  botMats.accent.color.copy(RED).multiplyScalar(2.2 * fade * flicker);
+  botGlow.intensity = 4 * fade * flicker;
+  botRing.visible = false;
 }
 
 // ---------------------------------------------------------------------------
@@ -1239,7 +1421,7 @@ function updateBullets(dt) {
     }
     if (hitT !== null && (wallT === null || hitT <= wallT)) {
       const at = tmpV2.copy(p0).lerp(p1, hitT);
-      if (b.owner === 'player') damageBot(b.damage, at.clone());
+      if (b.owner === 'player') damageBot(b.damage, at.clone(), b.dir);
       else damagePlayer(b.damage, bot.pos);
       b.active = false;
       b.mesh.visible = false;
@@ -1299,7 +1481,7 @@ function updateCamera(dt, time) {
   playerLight.intensity = Math.max(0, playerLight.intensity - dt * 80);
   if (playerLight.intensity < 2) playerFlash.visible = false;
   botLight.intensity = Math.max(0, botLight.intensity - dt * 90);
-  if (botLight.intensity < 2) botFlash.visible = false;
+  if (botLight.intensity < 2) botFlash.visible = botFlashCone.visible = false;
 }
 
 function drawMinimap() {
@@ -1393,22 +1575,7 @@ function tick() {
   }
 
   if (!paused) {
-    if (bot.dead) {
-      bot.deathT += dt;
-      const k = Math.min(1, bot.deathT / 0.6);
-      botModel.root.rotation.x = -k * (Math.PI / 2) * 0.95;
-      botModel.root.position.y = -k * 0.2;
-      if (bot.deathT > 1.6) botModel.root.visible = false;
-      bot.vel.set(0, 0);
-    } else {
-      syncBotModel(game.state === 'playing' ? dt : 0);
-      botModel.root.rotation.x = 0;
-    }
-    bot.flash = Math.max(0, bot.flash - dt * 6);
-    botMats.body.emissiveIntensity = bot.flash * 0.9;
-    botMats.dark.emissiveIntensity = bot.flash * 0.6;
-    const pulse = 2.4 + Math.sin(time * 6) * 0.6;
-    botMats.accent.color.copy(COLORS.magenta).multiplyScalar(pulse);
+    animateBot(game.state === 'playing' || bot.dead ? dt : 0, time);
 
     botBar.visible = !bot.dead && game.state !== 'menu';
     botBar.position.set(bot.pos.x, 2.55, bot.pos.y);

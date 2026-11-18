@@ -31,6 +31,9 @@ Then open <http://localhost:8000>.
 ## Features
 
 - Enclosed arena with cover obstacles, neon trim, shadows, fog and bloom post-processing.
+- Armored combat-robot enemy built entirely from Three.js primitives: glowing red eye slits, spiked
+  shoulder plates, reactor backpack, two-handed rifle, knee-jointed walk cycle, recoil and muzzle
+  flash, hit flash/stagger with knockback, and a kneel-and-topple death sequence.
 - AI opponent that hunts you with A* pathfinding, strafes while engaging, leads its shots,
   and retreats to cover when its health is low. Three difficulty levels.
 - Projectile-based hit detection against obstacles and both combatants.
